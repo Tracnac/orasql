@@ -1,4 +1,4 @@
-[![Go](https://github.com/Tracnac/orasql/actions/workflows/go.yml/badge.svg)](https://github.com/Tracnac/orasql/actions/workflows/go.yml)
+[![Go](https://github.com/Tracnac/orasql/actions/workflows/go.yml/badge.svg)](https://github.com/Tracnac/orasql/actions/workflows/go.yml) [![CodeQL](https://github.com/Tracnac/orasql/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/Tracnac/orasql/actions/workflows/codeql-analysis.yml)
 
 
 
