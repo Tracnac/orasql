@@ -1,6 +1,9 @@
+[![Go](https://github.com/Tracnac/orasql/actions/workflows/go.yml/badge.svg)](https://github.com/Tracnac/orasql/actions/workflows/go.yml)
+
+
+
 # orasql
 An autonomous Oracle sql toolbox
-
 
 __Usage:__
 ```man
