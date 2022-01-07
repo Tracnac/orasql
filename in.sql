@@ -1,0 +1,1 @@
+select name,dbid from v$database
