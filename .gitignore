@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-orasql
+orasql*
 
 # Test binary, built with `go test -c`
 *.test
@@ -18,3 +18,5 @@ orasql
 # Editor
 .idea/
 .vscode/
+*.xlsx
+go.sum
