@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/sijms/go-ora/v2"
+	"github.com/xuri/excelize/v2"
 	"io"
 	"os"
 	"strconv"
@@ -15,10 +16,11 @@ var (
 	jsonOut  bool
 	csvOut   bool
 	kvOut    bool
+	excelOut bool
 	debug    bool
 
-	DBConStr string
-	query    string
+	DBConStr  string
+	query     string
 	colCount  int
 	colLength int
 
@@ -49,6 +51,14 @@ func getParams() {
 		payload       string
 	)
 
+	// Rework:
+	// -of output { .out .json .kv .csv .xls }
+	// -if input  { .sql .json .ini }
+	// -ot outputType: human, json, kv, csv, xls
+	// -query
+	// -dsn
+	// -debug
+
 	flag.StringVar(&dsn, "dsn", "", "oracle://user:pass@dsn/service_name\nEnv: ORACLESQL_DSN, ORACLESQL_USER, ORACLESQL_PWD")
 	flag.StringVar(&query, "query", "", "select 'column' as column_name from dual")
 	flag.StringVar(&queryFromFile, "file", "/dev/stdin", "Input query from file")
@@ -57,6 +67,7 @@ func getParams() {
 	flag.BoolVar(&jsonOut, "json", false, "JSON Output")
 	flag.BoolVar(&csvOut, "csv", false, "CSV Output")
 	flag.BoolVar(&kvOut, "kv", false, "Key/Value Output (2 columns max)")
+	flag.BoolVar(&excelOut, "excel", false, "Excel Output")
 	flag.BoolVar(&debug, "debug", false, "Show column type (Default output only)")
 	flag.Parse()
 
@@ -107,12 +118,12 @@ func getParams() {
 	if kvOut && csvOut {
 		parameterErrExit("\n-kv not allowed with -csv")
 	}
-	if !jsonOut && !csvOut && !kvOut || debug {
+	if !jsonOut && !csvOut && !kvOut && !excelOut || debug {
 		humanOut = true
 	}
 
-	if (jsonOut || csvOut || kvOut) && debug {
-		parameterErrExit("\n-column not allowed with other output")
+	if (jsonOut || csvOut || kvOut || excelOut) && debug {
+		parameterErrExit("\n-debug not allowed with other output")
 	}
 
 	if output == "/dev/stdout" {
@@ -220,6 +231,8 @@ func main() {
 		oldFashion(rows)
 	} else if jsonOut {
 		robot(rows)
+	} else if excelOut {
+		excel(rows)
 	} else {
 		lazyKV(rows)
 	}
@@ -360,4 +373,36 @@ func lazyKV(dataset *go_ora.DataSet) {
 		tmp = fmt.Sprintf("%s: %s\n", str0, str1)
 		outputString(tmp)
 	}
+}
+
+// Pour le fun...
+func excel(dataset *go_ora.DataSet) {
+	f := excelize.NewFile()
+	// TODO: Manage output file, if the file already exists add a sheet instead of creating a new excel file.
+	index := f.NewSheet("Sheet1")
+	style, err := f.NewStyle(`{"font":{"bold":true,"color":"#FF0000"}}`)
+	checkErrExit("(excel) Create style error", err)
+
+	for k, v := range dataset.Columns() {
+		int2ColRow, err := excelize.CoordinatesToCellName(k+1, 1)
+		checkErrExit("(excel) int2ColRow", err)
+		err = f.SetCellValue("Sheet1", int2ColRow, v)
+		checkErrExit("(excel)[1] Set cell value error", err)
+		err = f.SetCellStyle("Sheet1", int2ColRow, int2ColRow, style)
+		checkErrExit("(excel) Set style error", err)
+	}
+
+	row := 1
+	for dataset.Next_() {
+		row += 1
+		for k, v := range dataset.CurrentRow {
+			int2ColRow, err := excelize.CoordinatesToCellName(k+1, row)
+			checkErrExit("(excel) int2ColRow", err)
+			err = f.SetCellValue("Sheet1", int2ColRow, v)
+			checkErrExit("(excel)[1] Set cell value error", err)
+		}
+	}
+	f.SetActiveSheet(index)
+	err = f.SaveAs("Book1.xlsx")
+	checkErrExit("(excel) Write error", err)
 }
