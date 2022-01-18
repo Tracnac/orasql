@@ -20,10 +20,11 @@ orasql  -dsn server_url -query sql
             json  JSON Output
             kv    Key/Value Output (2 columns max)
             xls   Excel file output
+                  (if the xls file already exists a new sheet is created)
     -of string
             Output file (default "/dev/stdout")
     -i  { pipe, sql, json, dir }
-            pipe Reqd from stdin
+            pipe Read from stdin
             sql  Read the query from file
             json Read options from file
     -if string
@@ -78,3 +79,13 @@ default output:
         "query": "select sysdate from dual"
       }
 ```
+
+#### Work in progress
+#### TODO:
+- [ ] Append mode for out mode
+- [ ] Option for the sheet name in xls file
+- [ ] Implement read queries from directory
+- [ ] save/run/delete queries from sqlite
+- [ ] Query array in json file
+- [ ] Auto naming output file when multiple queries
+- [ ] Run queries in parallel

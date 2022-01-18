@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"time"
 )
 
 var (
@@ -204,7 +205,8 @@ func usage() {
             xls   Excel file output
     -of string
             Output file (default "/dev/stdout")
-    -i  { sql, json, dir }
+    -i  { pipe, sql, json, dir }
+            pipe Read from stdin
             sql  Read the query from file
             json Read all parameter from file
     -if string
@@ -219,7 +221,6 @@ func usage() {
      -if /dev/sdtin
 
 Example:
-
     ./orasql  -dsn "oracle://user:pass@server/service_name" -query "select sysdate from dual"
     ./orasql  -dsn "oracle://user:pass@server/service_name" -i sql -if query.sql
     ./orasql  -i json -if sql.json
@@ -258,36 +259,6 @@ default output:
         "query": "select sysdate from dual"
       }
 `)
-
-	//	fmt.Println()
-	//	fmt.Println("Usage:")
-	//	fmt.Println(os.Args[0], ` -dsn server_url -query sql`)
-	//	flag.PrintDefaults()
-	//	fmt.Println()
-	//	fmt.Print("Example:\n\n")
-	//	fmt.Println("  ", os.Args[0], ` -db 'oracle' -dsn "user:pass@server/service_name" -query "select sysdate from dual"`)
-	//	fmt.Println("  ", os.Args[0], ` -db 'oracle' -dsn "user:pass@server/service_name" -file query.sql`)
-	//	fmt.Println("  ", os.Args[0], ` -inputFrom inputFrom.json`)
-	//	fmt.Println("   echo 'select sysdate from dual' | ", os.Args[0], ` -db oracle -dsn "user:pass@server/service_name"`)
-	//	fmt.Println("\nWith os.env: ")
-	//	fmt.Println(`   ORASQL_DSN=127.0.0.1:1521/DB ORASQL_USER=user ORASQL_PWD=password `, os.Args[0], ` -db 'oracle' -query "select sysdate from dual"`)
-	//	fmt.Print("\ndefault output:\n", `  SYSDATE    : 2022-01-06 18:26:37 +0000 UTC`, "\n")
-	//	fmt.Print("\n-debug:\n", `  SYSDATE    [DATE]           : 2022-01-06 19:26:27 +0000 UTC`, "\n")
-	//	fmt.Print("\n-json:\n", `  [
-	//    {"SYSDATE": "2022-01-06T18:21:57Z"}
-	//  ]`, "\n")
-	//	fmt.Print("\n-csv:\n", `  "SYSDATE"
-	//  "2022-01-06 18:28:03 +0000 UTC"`, "\n")
-	//	fmt.Print("\n-kv with (\"select 'Date', sysdate from dual\"):\n", `  "Date": "2022-01-06T19:21:21Z"`, "\n")
-	//	fmt.Print("\n-inputFrom:", `
-	//With json file:
-	//  {
-	//    "db": "oracle"
-	//    "dsn": "127.0.0.1:1521/DB",
-	//    "user": "user",
-	//    "pwd": "password",
-	//    "query": "select sysdate from dual"
-	//  }`, "\n")
 }
 
 // outputString: Write string to outputFile global var handler and call checkErrExit.
@@ -487,18 +458,33 @@ func lazyKV(dataset *go_ora.DataSet) {
 }
 
 func excel(dataset *go_ora.DataSet) {
-	f := excelize.NewFile()
-	// TODO: Manage output file, if the file already exists add a sheet instead of creating a new excel file.
-	index := f.NewSheet("Sheet1")
+	isCreated := false
+	var f *excelize.File
+	if xlsOut {
+		if _, err := os.Stat(output); err != nil {
+			f = excelize.NewFile()
+			isCreated = true
+		} else {
+			f, err = excelize.OpenFile(output)
+			checkErrExit("Cannot open/read or not type of xlsx file", err)
+		}
+	}
+
+	t := time.Now()
+	sheetName := fmt.Sprintf("%02d%02d%04d_%02d%02d%02d", t.Day(), t.Month(), t.Year(), t.Hour(), t.Minute(), t.Second())
+
+	index := f.NewSheet(sheetName)
+	f.SetActiveSheet(index)
+
 	style, err := f.NewStyle(`{"font":{"bold":true,"color":"#FF0000"}}`)
 	checkErrExit("(excel) Create style error", err)
 
 	for k, v := range dataset.Columns() {
 		int2ColRow, err := excelize.CoordinatesToCellName(k+1, 1)
 		checkErrExit("(excel) int2ColRow", err)
-		err = f.SetCellValue("Sheet1", int2ColRow, v)
+		err = f.SetCellValue(sheetName, int2ColRow, v)
 		checkErrExit("(excel)[1] Set cell value error", err)
-		err = f.SetCellStyle("Sheet1", int2ColRow, int2ColRow, style)
+		err = f.SetCellStyle(sheetName, int2ColRow, int2ColRow, style)
 		checkErrExit("(excel) Set style error", err)
 	}
 
@@ -508,11 +494,16 @@ func excel(dataset *go_ora.DataSet) {
 		for k, v := range dataset.CurrentRow {
 			int2ColRow, err := excelize.CoordinatesToCellName(k+1, row)
 			checkErrExit("(excel) int2ColRow", err)
-			err = f.SetCellValue("Sheet1", int2ColRow, v)
+			err = f.SetCellValue(sheetName, int2ColRow, v)
 			checkErrExit("(excel)[2] Set cell value error", err)
 		}
 	}
-	f.SetActiveSheet(index)
-	err = f.SaveAs(output)
-	checkErrExit("(excel) Write error", err)
+
+	if isCreated {
+		err = f.SaveAs(output)
+		checkErrExit("(excel)[SaveAs] Write error", err)
+	} else {
+		err = f.Save()
+		checkErrExit("(excel)[Save] Write error", err)
+	}
 }
