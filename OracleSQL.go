@@ -12,19 +12,28 @@ import (
 )
 
 var (
-	humanOut bool
-	jsonOut  bool
-	csvOut   bool
-	kvOut    bool
-	excelOut bool
-	debug    bool
+	dsn    string
+	dbType string
+	query  string
+
+	queryFrom string
+	inputFrom string
+
+	outputType string
+	humanOut   bool
+	jsonOut    bool
+	csvOut     bool
+	kvOut      bool
+	xlsOut     bool
+
+	output     string
+	outputFile io.Writer
+
+	debug bool
 
 	DBConStr  string
-	query     string
 	colCount  int
 	colLength int
-
-	outputFile io.Writer
 )
 
 // checkErrExit: Print string to stderr and exit if err is not nil
@@ -44,138 +53,241 @@ func parameterErrExit(msg string) {
 
 // getParams: Parse flags from command line
 func getParams() {
-	var (
-		dsn           string
-		queryFromFile string
-		output        string
-		payload       string
-	)
-
 	// Rework:
-	// -of output { .out .json .kv .csv .xls }
-	// -if input  { .sql .json .ini }
-	// -ot outputType: human, json, kv, csv, xls
-	// -query
+	// -db { oracle }
 	// -dsn
+	// -query
+	// -i: { sql json dir }
+	// -if: { *.sql *.json dir }
+	// -o: out, json, kv, csv, xls
+	// -of output { .out .json .kv .csv .xls }
 	// -debug
 
-	flag.StringVar(&dsn, "dsn", "", "oracle://user:pass@dsn/service_name\nEnv: ORACLESQL_DSN, ORACLESQL_USER, ORACLESQL_PWD")
+	flag.StringVar(&dbType, "db", "oracle", "Database type")
+	flag.StringVar(&dsn, "dsn", "", "user:pass@dsn/service_name\nEnv: ORASQL_DSN, ORASQL_USER, ORASQL_PWD")
 	flag.StringVar(&query, "query", "", "select 'column' as column_name from dual")
-	flag.StringVar(&queryFromFile, "file", "/dev/stdin", "Input query from file")
-	flag.StringVar(&payload, "payload", "", "Input payload Json from file")
-	flag.StringVar(&output, "output", "/dev/stdout", "Output file")
-	flag.BoolVar(&jsonOut, "json", false, "JSON Output")
-	flag.BoolVar(&csvOut, "csv", false, "CSV Output")
-	flag.BoolVar(&kvOut, "kv", false, "Key/Value Output (2 columns max)")
-	flag.BoolVar(&excelOut, "excel", false, "Excel Output")
-	flag.BoolVar(&debug, "debug", false, "Show column type (Default output only)")
+
+	flag.StringVar(&queryFrom, "i", "", "Input query from { pipe, sql, json or dir }")
+	flag.StringVar(&inputFrom, "if", "/dev/stdin", "Input file or directory name")
+
+	flag.StringVar(&outputType, "o", "out", "Output { out (default), kv, json, csv, xls }")
+	flag.StringVar(&output, "of", "/dev/stdout", "Output file (default /dev/stdout)")
+
+	flag.BoolVar(&debug, "debug", false, "Show column type (Work only with out type)")
+
 	flag.Parse()
 
-	// Payload must be the first
-	// Cause it define some mandatory vars
-	if payload != "" {
-		var payloadJson struct {
-			Dsn      string `json:"dsn"`
-			User     string `json:"user"`
-			Password string `json:"password"`
-			Query    string `json:"query"`
-		}
-		if _, err := os.Stat(payload); err != nil {
-			parameterErrExit("\nPlease provide a valid payload filename")
-		} else {
-			tmp, err := os.ReadFile(payload)
-			checkErrExit("Payload read error: ", err)
-			err = json.Unmarshal(tmp, &payloadJson)
-			checkErrExit("Json load error: ", err)
-			dsn = fmt.Sprintf("oracle://%s:%s@%s", payloadJson.User, payloadJson.Password, payloadJson.Dsn)
-			query = payloadJson.Query
-		}
-	}
-
-	DBConStr = os.ExpandEnv(dsn)
-	if DBConStr == "" {
-		oraclesqlDsn, isok := os.LookupEnv("ORACLESQL_DSN")
-		if !isok {
-			parameterErrExit("\nMissing -dsn option or ORACLESQL_DSN env")
-		}
-
-		oraclesqlUser, isok := os.LookupEnv("ORACLESQL_USER")
-		if !isok {
-			parameterErrExit("\nMissing -dsn option or ORACLESQL_USER env")
-		}
-
-		oraclesqlPwd, isok := os.LookupEnv("ORACLESQL_PWD")
-		if !isok {
-			parameterErrExit("\nMissing -dsn option or ORACLESQL_DSN env")
-		}
-		DBConStr = fmt.Sprintf("oracle://%s:%s@%s", oraclesqlUser, oraclesqlPwd, oraclesqlDsn)
-	}
-
-	if jsonOut && csvOut {
-		parameterErrExit("\nPlease select only one output -json or -csv")
-	}
-
-	if kvOut && csvOut {
-		parameterErrExit("\n-kv not allowed with -csv")
-	}
-	if !jsonOut && !csvOut && !kvOut && !excelOut || debug {
+	// Syntax check -o
+	switch outputType {
+	case "kv":
+		kvOut = true
+	case "json":
+		jsonOut = true
+	case "csv":
+		csvOut = true
+	case "xls":
+		xlsOut = true
+	case "out":
+		humanOut = true
+	default:
 		humanOut = true
 	}
 
-	if (jsonOut || csvOut || kvOut || excelOut) && debug {
-		parameterErrExit("\n-debug not allowed with other output")
+	if !jsonOut && !csvOut && !kvOut && !xlsOut || debug {
+		humanOut = true
+	}
+
+	if (jsonOut || csvOut || kvOut || xlsOut) && debug {
+		parameterErrExit("\nInvalid -debug not allowed")
+	}
+
+	// Syntax check -i
+	if queryFrom != "" {
+		switch queryFrom {
+		case "sql":
+			if _, err := os.Stat(inputFrom); err != nil {
+				parameterErrExit("\nPlease provide a valid input")
+			} else {
+				var tmp []byte
+				tmp, err = os.ReadFile(inputFrom)
+				checkErrExit("File read error: ", err)
+				query = string(tmp)
+			}
+		case "json":
+			var payloadJson struct {
+				DBType   string `json:"db"`
+				Dsn      string `json:"dsn"`
+				User     string `json:"user"`
+				Password string `json:"pwd"`
+				Query    string `json:"query"`
+			}
+			if _, err := os.Stat(inputFrom); err != nil {
+				parameterErrExit("\nPlease provide a valid inputFrom filename")
+			} else {
+				tmp, err := os.ReadFile(inputFrom)
+				checkErrExit("Payload read error: ", err)
+				err = json.Unmarshal(tmp, &payloadJson)
+				checkErrExit("Json load error: ", err)
+				if payloadJson.DBType == "" {
+					dbType = "oracle"
+				} else {
+					dbType = payloadJson.DBType
+				}
+				dsn = fmt.Sprintf("%s:%s@%s", payloadJson.User, payloadJson.Password, payloadJson.Dsn)
+				query = payloadJson.Query
+			}
+		case "dir":
+		case "pipe":
+			if query == "" && inputFrom == "/dev/stdin" {
+				tmp, err := os.ReadFile(inputFrom)
+				checkErrExit("File read error: ", err)
+				query = string(tmp)
+			}
+		default:
+			parameterErrExit("\nInvalid -i option")
+		}
+	}
+
+	// Only oracle for now
+	// Syntax check -db
+	if dbType != "oracle" {
+		dbType = "oracle"
+	}
+
+	// Syntax check -dsn
+	DBConStr = os.ExpandEnv(dsn)
+	if DBConStr == "" {
+		oraclesqlDsn, isok := os.LookupEnv("ORASQL_DSN")
+		if !isok {
+			parameterErrExit("\nMissing -dsn option or ORASQL_DSN env")
+		}
+
+		oraclesqlUser, isok := os.LookupEnv("ORASQL_USER")
+		if !isok {
+			parameterErrExit("\nMissing -dsn option or ORASQL_USER env")
+		}
+
+		oraclesqlPwd, isok := os.LookupEnv("ORASQL_PWD")
+		if !isok {
+			parameterErrExit("\nMissing -dsn option or ORASQL_DSN env")
+		}
+		DBConStr = fmt.Sprintf("%s://%s:%s@%s", dbType, oraclesqlUser, oraclesqlPwd, oraclesqlDsn)
+	} else {
+		DBConStr = fmt.Sprintf("%s://%s", dbType, dsn)
 	}
 
 	if output == "/dev/stdout" {
 		outputFile = os.Stdout
-	} else {
+	} else if !xlsOut {
 		var err error
 		outputFile, err = os.Create(output)
 		checkErrExit("File creation error: ", err)
-	}
-
-	if query == "" {
-		if _, err := os.Stat(queryFromFile); err != nil {
-			parameterErrExit("\nPlease provide a valid filename")
-		} else {
-			var tmp []byte
-			tmp, err = os.ReadFile(queryFromFile)
-			checkErrExit("File read error: ", err)
-			query = string(tmp)
-		}
 	}
 }
 
 // usage: Show usage
 func usage() {
-	fmt.Println()
-	fmt.Println("Usage:")
-	fmt.Println(os.Args[0], ` -dsn server_url -query sql`)
-	flag.PrintDefaults()
-	fmt.Println()
-	fmt.Print("Example:\n\n")
-	fmt.Println("  ", os.Args[0], ` -dsn "oracle://user:pass@server/service_name" -query "select sysdate from dual"`)
-	fmt.Println("  ", os.Args[0], ` -dsn "oracle://user:pass@server/service_name" -file query.sql`)
-	fmt.Println("  ", os.Args[0], ` -payload payload.json`)
-	fmt.Println("   echo 'select sysdate from dual' | ", os.Args[0], ` -dsn "oracle://user:pass@server/service_name"`)
-	fmt.Println("\nWith os.env: ")
-	fmt.Println(`   ORACLESQL_DSN=127.0.0.1:1521/DB ORACLESQL_USER=user ORACLESQL_PWD=password `, os.Args[0], ` -query "select sysdate from dual"`)
-	fmt.Print("\ndefault output:\n", `  SYSDATE    : 2022-01-06 18:26:37 +0000 UTC`, "\n")
-	fmt.Print("\n-debug:\n", `  SYSDATE    [DATE]           : 2022-01-06 19:26:27 +0000 UTC`, "\n")
-	fmt.Print("\n-json:\n", `  [
-    {"SYSDATE": "2022-01-06T18:21:57Z"}
-  ]`, "\n")
-	fmt.Print("\n-csv:\n", `  "SYSDATE"
-  "2022-01-06 18:28:03 +0000 UTC"`, "\n")
-	fmt.Print("\n-kv with (\"select 'Date', sysdate from dual\"):\n", `  "Date": "2022-01-06T19:21:21Z"`, "\n")
-	fmt.Print("\n-payload:", `
-With json file:
-  {
-    "dsn": "127.0.0.1:1521/DB",
-    "user": "user",
-    "password": "password",
-    "query": "select sysdate from dual"
-  }`, "\n")
+	fmt.Print(`orasql  -dsn server_url -query sql
+    -db string
+        oracle by default not use yet
+    -dsn string
+        user:pass@dsn/service_name
+        Env: ORASQL_DSN, ORASQL_USER, ORASQL_PWD
+    -query string
+        select 'column' as column_name from dual
+    -debug
+        Show column type (Default output only)
+    -o  { csv, json, kv, xls or out (default) }
+            csv   CSV Output
+            json  JSON Output
+            kv    Key/Value Output (2 columns max)
+            xls   Excel file output
+    -of string
+            Output file (default "/dev/stdout")
+    -i  { sql, json, dir }
+            sql  Read the query from file
+            json Read all parameter from file
+    -if string
+        File (default "/dev/stdin")
+
+    -i work with -if
+    -o work with -of
+
+    By default:
+     -o out
+     -of /dev/sdtout
+     -if /dev/sdtin
+
+Example:
+
+    ./orasql  -dsn "oracle://user:pass@server/service_name" -query "select sysdate from dual"
+    ./orasql  -dsn "oracle://user:pass@server/service_name" -i sql -if query.sql
+    ./orasql  -i json -if sql.json
+    echo 'select sysdate from dual' |  ./orasql  -dsn "oracle://user:pass@server/service_name"
+
+With os environment: 
+    ORACLESQL_DSN=127.0.0.1:1521/DB
+    ORACLESQL_USER=user
+    ORACLESQL_PWD=password
+    orasql  -query "select sysdate from dual"
+
+default output:
+    SYSDATE    : 2022-01-06 18:26:37 +0000 UTC
+
+-debug:
+    SYSDATE    [DATE]           : 2022-01-06 19:26:27 +0000 UTC
+
+-o json:
+    [
+        {"SYSDATE": "2022-01-06T18:21:57Z"}
+    ]
+
+-o csv:
+    "SYSDATE"
+    "2022-01-06 18:28:03 +0000 UTC"
+
+-o kv: with ("select 'Date', sysdate from dual"):
+    "Date": "2022-01-06T19:21:21Z"
+
+-i json -if sql.json:
+      {
+        "db": "oracle"
+        "dsn": "127.0.0.1:1521/DB",
+        "user": "user",
+        "password": "password",
+        "query": "select sysdate from dual"
+      }
+`)
+
+	//	fmt.Println()
+	//	fmt.Println("Usage:")
+	//	fmt.Println(os.Args[0], ` -dsn server_url -query sql`)
+	//	flag.PrintDefaults()
+	//	fmt.Println()
+	//	fmt.Print("Example:\n\n")
+	//	fmt.Println("  ", os.Args[0], ` -db 'oracle' -dsn "user:pass@server/service_name" -query "select sysdate from dual"`)
+	//	fmt.Println("  ", os.Args[0], ` -db 'oracle' -dsn "user:pass@server/service_name" -file query.sql`)
+	//	fmt.Println("  ", os.Args[0], ` -inputFrom inputFrom.json`)
+	//	fmt.Println("   echo 'select sysdate from dual' | ", os.Args[0], ` -db oracle -dsn "user:pass@server/service_name"`)
+	//	fmt.Println("\nWith os.env: ")
+	//	fmt.Println(`   ORASQL_DSN=127.0.0.1:1521/DB ORASQL_USER=user ORASQL_PWD=password `, os.Args[0], ` -db 'oracle' -query "select sysdate from dual"`)
+	//	fmt.Print("\ndefault output:\n", `  SYSDATE    : 2022-01-06 18:26:37 +0000 UTC`, "\n")
+	//	fmt.Print("\n-debug:\n", `  SYSDATE    [DATE]           : 2022-01-06 19:26:27 +0000 UTC`, "\n")
+	//	fmt.Print("\n-json:\n", `  [
+	//    {"SYSDATE": "2022-01-06T18:21:57Z"}
+	//  ]`, "\n")
+	//	fmt.Print("\n-csv:\n", `  "SYSDATE"
+	//  "2022-01-06 18:28:03 +0000 UTC"`, "\n")
+	//	fmt.Print("\n-kv with (\"select 'Date', sysdate from dual\"):\n", `  "Date": "2022-01-06T19:21:21Z"`, "\n")
+	//	fmt.Print("\n-inputFrom:", `
+	//With json file:
+	//  {
+	//    "db": "oracle"
+	//    "dsn": "127.0.0.1:1521/DB",
+	//    "user": "user",
+	//    "pwd": "password",
+	//    "query": "select sysdate from dual"
+	//  }`, "\n")
 }
 
 // outputString: Write string to outputFile global var handler and call checkErrExit.
@@ -231,7 +343,7 @@ func main() {
 		oldFashion(rows)
 	} else if jsonOut {
 		robot(rows)
-	} else if excelOut {
+	} else if xlsOut {
 		excel(rows)
 	} else {
 		lazyKV(rows)
@@ -245,7 +357,6 @@ func humanoid(dataset *go_ora.DataSet) {
 		for r, v := range dataset.CurrentRow {
 			if debug {
 				switch oracleType := dataset.Cols[r].DataType; oracleType {
-				// go-ora OracleType
 				case 2:
 					_format := baseFormat + "%-16s %s %v\n"
 					if dataset.Cols[r].Precision == 38 && dataset.Cols[r].Scale == 255 {
@@ -375,7 +486,6 @@ func lazyKV(dataset *go_ora.DataSet) {
 	}
 }
 
-// Pour le fun...
 func excel(dataset *go_ora.DataSet) {
 	f := excelize.NewFile()
 	// TODO: Manage output file, if the file already exists add a sheet instead of creating a new excel file.
@@ -399,10 +509,10 @@ func excel(dataset *go_ora.DataSet) {
 			int2ColRow, err := excelize.CoordinatesToCellName(k+1, row)
 			checkErrExit("(excel) int2ColRow", err)
 			err = f.SetCellValue("Sheet1", int2ColRow, v)
-			checkErrExit("(excel)[1] Set cell value error", err)
+			checkErrExit("(excel)[2] Set cell value error", err)
 		}
 	}
 	f.SetActiveSheet(index)
-	err = f.SaveAs("Book1.xlsx")
+	err = f.SaveAs(output)
 	checkErrExit("(excel) Write error", err)
 }

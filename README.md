@@ -6,42 +6,50 @@ An autonomous Oracle sql toolbox.
 __Usage:__
 ```man
 orasql  -dsn server_url -query sql
+    -db string
+        oracle by default not use yet
     -dsn string
-        oracle://user:pass@dsn/service_name
-        Env: ORACLESQL_DSN, ORACLESQL_USER, ORACLESQL_PWD
+        user:pass@dsn/service_name
+        Env: ORASQL_DSN, ORASQL_USER, ORASQL_PWD
     -query string
         select 'column' as column_name from dual
     -debug
         Show column type (Default output only)
-    
-    -csv
-        CSV Output
-    -json
-        JSON Output
-    -kv
-        Key/Value Output (2 columns max)
-    -excel
-        Generate an Excel file (Book1.xlsx)
+    -o  { csv, json, kv, xls or out (default) }
+            csv   CSV Output
+            json  JSON Output
+            kv    Key/Value Output (2 columns max)
+            xls   Excel file output
+    -of string
+            Output file (default "/dev/stdout")
+    -i  { pipe, sql, json, dir }
+            pipe Reqd from stdin
+            sql  Read the query from file
+            json Read options from file
+    -if string
+        File (default "/dev/stdin")
 
-    -file string
-        Input query from file (default "/dev/stdin")
-    -output string
-        Output file (default "/dev/stdout")
-    -payload string
-        Input payload Json from file
+    -i work with -if
+    -o work with -of
+
+    By default:
+     -o out
+     -of /dev/sdtout
+     -if /dev/sdtin
+     
 
 Example:
 
-    ./orasql  -dsn "oracle://user:pass@server/service_name" -query "select sysdate from dual"
-    ./orasql  -dsn "oracle://user:pass@server/service_name" -file query.sql
-    ./orasql  -payload payload.json
-    echo 'select sysdate from dual' |  ./orasql  -dsn "oracle://user:pass@server/service_name"
+    ./orasql -dsn "oracle://user:pass@server/service_name" -query "select sysdate from dual"
+    ./orasql -dsn "oracle://user:pass@server/service_name" -i sql -if query.sql
+    ./orasql -i json -if sql.json
+    echo 'select sysdate from dual' |  ./orasql -i pipe -dsn "oracle://user:pass@server/service_name"
 
 With os environment: 
     ORACLESQL_DSN=127.0.0.1:1521/DB
     ORACLESQL_USER=user
     ORACLESQL_PWD=password
-    orasql  -query "select sysdate from dual"
+    orasql -query "select sysdate from dual"
 
 default output:
     SYSDATE    : 2022-01-06 18:26:37 +0000 UTC
@@ -49,21 +57,21 @@ default output:
 -debug:
     SYSDATE    [DATE]           : 2022-01-06 19:26:27 +0000 UTC
 
--json:
+-o json:
     [
         {"SYSDATE": "2022-01-06T18:21:57Z"}
     ]
 
--csv:
+-o csv:
     "SYSDATE"
     "2022-01-06 18:28:03 +0000 UTC"
 
--kv: with ("select 'Date', sysdate from dual"):
+-o kv: with ("select 'Date', sysdate from dual"):
     "Date": "2022-01-06T19:21:21Z"
 
--payload:
-    With json file:
+-i json -if sql.json:
       {
+        "db": "oracle"
         "dsn": "127.0.0.1:1521/DB",
         "user": "user",
         "password": "password",
