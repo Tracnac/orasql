@@ -203,12 +203,13 @@ func usage() {
             json  JSON Output
             kv    Key/Value Output (2 columns max)
             xls   Excel file output
+                  (if the xls file already exists a new sheet is created)
     -of string
             Output file (default "/dev/stdout")
     -i  { pipe, sql, json, dir }
             pipe Read from stdin
             sql  Read the query from file
-            json Read all parameter from file
+            json Read all parameters from file
     -if string
         File (default "/dev/stdin")
 
@@ -221,8 +222,8 @@ func usage() {
      -if /dev/sdtin
 
 Example:
-    ./orasql  -dsn "oracle://user:pass@server/service_name" -query "select sysdate from dual"
-    ./orasql  -dsn "oracle://user:pass@server/service_name" -i sql -if query.sql
+    ./orasql  -db 'oracle' -dsn "user:pass@server/service_name" -query "select sysdate from dual"
+    ./orasql  -dsn "user:pass@server/service_name" -i sql -if query.sql
     ./orasql  -i json -if sql.json
     echo 'select sysdate from dual' |  ./orasql  -dsn "oracle://user:pass@server/service_name"
 

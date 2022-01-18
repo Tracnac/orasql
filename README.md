@@ -41,9 +41,10 @@ orasql  -dsn server_url -query sql
 
 Example:
 
-    ./orasql -dsn "oracle://user:pass@server/service_name" -query "select sysdate from dual"
-    ./orasql -dsn "oracle://user:pass@server/service_name" -i sql -if query.sql
+    ./orasql -db 'oracle' -dsn "user:pass@server/service_name" -query "select sysdate from dual"
+    ./orasql -dsn "user:pass@server/service_name" -i sql -if query.sql
     ./orasql -i json -if sql.json
+    ./orasql -i json -if sql.json -o xls -of Excel.xlsx
     echo 'select sysdate from dual' |  ./orasql -i pipe -dsn "oracle://user:pass@server/service_name"
 
 With os environment: 
