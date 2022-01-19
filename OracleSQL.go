@@ -181,6 +181,10 @@ func getParams() {
 		DBConStr = fmt.Sprintf("%s://%s", dbType, dsn)
 	}
 
+	if xlsOut && output == "/dev/stdout" {
+		output = "Books.xlsx"
+	}
+
 	if output == "/dev/stdout" {
 		outputFile = os.Stdout
 	} else if !xlsOut {
