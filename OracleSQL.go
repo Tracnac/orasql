@@ -238,29 +238,31 @@ func getParams() {
 func usage() {
 	fmt.Print(`orasql  -dsn server_url -query sql
     -db string
-        oracle by default not use yet
+        oracle by default
     -dsn string
         user:pass@dsn/service_name
         Env: ORASQL_DSN, ORASQL_USER, ORASQL_PWD
     -query string
-        select 'column' as column_name from dual
+        select sysdate from dual
     -debug
         Show column type (Default output only)
-    -o  { csv, json, kv, xls or out (default) }
+    -o  { csv, json, yml, kv, xls or out (default) }
             csv   CSV Output
             json  JSON Output
+            yml   YAML Output
             kv    Key/Value Output (2 columns max)
             xls   Excel file output
-                  (if the xls file already exists a new sheet is created)
+                  (if the xls file already exists a new sheet will be created)
     -of string
             Output file (default "/dev/stdout")
             xlsx[:sheetName] ("books.xlsx:My_Sheet" will create a Sheet named "My_Sheet" 
                               if the sheet already exists it will be deleted, so beware
                               of referenced values from this sheet to an another one)
-    -i  { pipe, sql, json, dir }
+    -i  { pipe, sql, json, yml, dir }
             pipe Read from stdin
             sql  Read the query from file
-            json Read all parameters from file
+            json Read all parameters from JSON file
+            yml  Read all parameters from YAML file
     -if string
         File (default "/dev/stdin")
 
@@ -276,7 +278,10 @@ Example:
     ./orasql  -db 'oracle' -dsn "user:pass@server/service_name" -query "select sysdate from dual"
     ./orasql  -dsn "user:pass@server/service_name" -i sql -if query.sql
     ./orasql  -i json -if sql.json
-    echo 'select sysdate from dual' |  ./orasql  -dsn "oracle://user:pass@server/service_name"
+    ./orasql  -i yml -if sql.yml
+    ./orasql -i json -if sql.json -o xls -of Excel.xlsx
+    ./orasql -i json -if sql.json -o xls -of Excel.xlsx:sheet_name
+    echo 'select sysdate from dual' |  ./orasql  -i pipe -dsn "oracle://user:pass@server/service_name"
 
 With os environment: 
     ORACLESQL_DSN=127.0.0.1:1521/DB
@@ -295,6 +300,13 @@ default output:
         {"SYSDATE": "2022-01-06T18:21:57Z"}
     ]
 
+-o yml:
+    oraSQL:
+      Lines:
+        '0':
+          -  SYSDATE: 2022-01-19T19:22:11Z
+      LineCount: 1
+
 -o csv:
     "SYSDATE"
     "2022-01-06 18:28:03 +0000 UTC"
@@ -303,13 +315,20 @@ default output:
     "Date": "2022-01-06T19:21:21Z"
 
 -i json -if sql.json:
-      {
-        "db": "oracle"
-        "dsn": "127.0.0.1:1521/DB",
-        "user": "user",
-        "password": "password",
-        "query": "select sysdate from dual"
-      }
+    {
+      "db": "oracle"
+      "dsn": "127.0.0.1:1521/DB",
+      "user": "user",
+      "password": "password",
+      "query": "select sysdate from dual"
+    }
+
+-i yml -if sql.yml:
+    db: "oracle"
+    dsn: "127.0.0.1:1521/DB"
+    user: user
+    pwd: password
+    query: "select sysdate from dual"
 `)
 }
 
