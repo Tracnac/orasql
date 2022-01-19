@@ -21,5 +21,4 @@ orasql*
 *.xlsx
 go.sum
 /test*
-/OracleSQL.go.bak
 /OraSQLTest.sh

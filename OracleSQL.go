@@ -47,7 +47,7 @@ func checkErrExit(msg string, err error) {
 
 // parameterErrExit: Print string to stderr and exit
 func parameterErrExit(msg string) {
-	_, _ = fmt.Fprintln(os.Stderr, msg)
+	_, _ = fmt.Fprintln(os.Stderr, "\x1b[1m"+msg+"\x1b[0m\n")
 	usage()
 	os.Exit(1)
 }
@@ -77,6 +77,10 @@ func getParams() {
 	flag.BoolVar(&debug, "debug", false, "Show column type (Work only with out type)")
 
 	flag.Parse()
+
+	if a := len(os.Args); a < 2 {
+		parameterErrExit("Usage:")
+	}
 
 	// Syntax check -o
 	switch outputType {
@@ -218,8 +222,8 @@ func usage() {
 
     By default:
      -o out
-     -of /dev/sdtout
-     -if /dev/sdtin
+     -of /dev/stdout
+     -if /dev/stdin
 
 Example:
     ./orasql  -db 'oracle' -dsn "user:pass@server/service_name" -query "select sysdate from dual"
