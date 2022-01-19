@@ -22,3 +22,4 @@ orasql*
 go.sum
 /test*
 /OraSQLTest.sh
+test/**

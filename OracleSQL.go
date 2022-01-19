@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/sijms/go-ora/v2"
 	"github.com/xuri/excelize/v2"
+	"gopkg.in/yaml.v3"
 	"io"
 	"os"
 	"regexp"
@@ -27,6 +28,7 @@ var (
 	csvOut     bool
 	kvOut      bool
 	xlsOut     bool
+	ymlOut     bool
 
 	output     string
 	outputFile io.Writer
@@ -61,20 +63,20 @@ func getParams() {
 	// -db { oracle }
 	// -dsn
 	// -query
-	// -i: { sql json dir }
+	// -i: { sql json dir yml }
 	// -if: { *.sql *.json dir }
-	// -o: out, json, kv, csv, xls
-	// -of output { .out .json .kv .csv .xls }
+	// -o: out, json, yml, kv, csv, xls
+	// -of output { .out .json .kv .csv .xls .yml}
 	// -debug
 
 	flag.StringVar(&dbType, "db", "oracle", "Database type")
 	flag.StringVar(&dsn, "dsn", "", "user:pass@dsn/service_name\nEnv: ORASQL_DSN, ORASQL_USER, ORASQL_PWD")
 	flag.StringVar(&query, "query", "", "select 'column' as column_name from dual")
 
-	flag.StringVar(&queryFrom, "i", "", "Input query from { pipe, sql, json or dir }")
+	flag.StringVar(&queryFrom, "i", "", "Input query from { pipe, sql, json, yml or dir }")
 	flag.StringVar(&inputFrom, "if", "/dev/stdin", "Input file or directory name")
 
-	flag.StringVar(&outputType, "o", "out", "Output { out (default), kv, json, csv, xls }")
+	flag.StringVar(&outputType, "o", "out", "Output { out (default), kv, json, yml, csv, xls }")
 	flag.StringVar(&output, "of", "/dev/stdout", "Output file (default /dev/stdout)")
 
 	flag.BoolVar(&debug, "debug", false, "Show column type (Work only with out type)")
@@ -97,15 +99,13 @@ func getParams() {
 		xlsOut = true
 	case "out":
 		humanOut = true
+	case "yml":
+		ymlOut = true
 	default:
 		humanOut = true
 	}
 
-	if !jsonOut && !csvOut && !kvOut && !xlsOut || debug {
-		humanOut = true
-	}
-
-	if (jsonOut || csvOut || kvOut || xlsOut) && debug {
+	if (jsonOut || csvOut || kvOut || xlsOut || ymlOut) && debug {
 		parameterErrExit("\nInvalid -debug not allowed")
 	}
 
@@ -143,6 +143,29 @@ func getParams() {
 				}
 				dsn = fmt.Sprintf("%s:%s@%s", payloadJson.User, payloadJson.Password, payloadJson.Dsn)
 				query = payloadJson.Query
+			}
+		case "yml":
+			var payloadYAML struct {
+				DBType   string `yaml:"db"`
+				Dsn      string `yaml:"dsn"`
+				User     string `yaml:"user"`
+				Password string `yaml:"pwd"`
+				Query    string `yaml:"query"`
+			}
+			if _, err := os.Stat(inputFrom); err != nil {
+				parameterErrExit("\nPlease provide a valid inputFrom filename")
+			} else {
+				tmp, err := os.ReadFile(inputFrom)
+				checkErrExit("Payload read error: ", err)
+				err = yaml.Unmarshal(tmp, &payloadYAML)
+				checkErrExit("YAML load error: ", err)
+				if payloadYAML.DBType == "" {
+					dbType = "oracle"
+				} else {
+					dbType = payloadYAML.DBType
+				}
+				dsn = fmt.Sprintf("%s:%s@%s", payloadYAML.User, payloadYAML.Password, payloadYAML.Dsn)
+				query = payloadYAML.Query
 			}
 		case "dir":
 		case "pipe":
@@ -343,6 +366,8 @@ func main() {
 		oldFashion(rows)
 	} else if jsonOut {
 		robot(rows)
+	} else if ymlOut {
+		geek(rows)
 	} else if xlsOut {
 		excel(rows)
 	} else {
@@ -428,6 +453,26 @@ func robot(dataset *go_ora.DataSet) {
 		}
 	}
 	tmp = fmt.Sprint("}\n]\n")
+	outputString(tmp)
+}
+
+func geek(dataset *go_ora.DataSet) {
+	var tmp string
+	tmp = fmt.Sprint("oraSQL:\n  Lines:\n")
+	outputString(tmp)
+	count := 0
+	for dataset.Next_() {
+		tmp = fmt.Sprintf("    '%d':\n",count)
+		outputString(tmp)
+		for k, v := range dataset.CurrentRow {
+			str, err := yaml.Marshal(v)
+			checkErrExit("(geek) Marshall Error str: ", err)
+			tmp = fmt.Sprintf("      -  %s: %s", dataset.Columns()[k], string(str))
+			outputString(tmp)
+		}
+		count += 1
+	}
+	tmp = fmt.Sprintf("  LineCount: %d\n",count)
 	outputString(tmp)
 }
 

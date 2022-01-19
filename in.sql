@@ -1,1 +1,1 @@
-select name,dbid from v$database
+select name ,dbid from v$database

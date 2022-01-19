@@ -86,7 +86,7 @@ default output:
 #### Work in progress
 #### TODO:
 - [ ] Append mode for out mode
-- [ ] Option for the sheet name in xls file
+- [x] Option for the sheet name in xls file
 - [ ] Implement read queries from directory
 - [ ] save/run/delete queries from sqlite
 - [ ] Query array in json file

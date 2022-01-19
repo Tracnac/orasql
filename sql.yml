@@ -1,0 +1,5 @@
+db: "oracle"
+dsn: "127.0.0.1:1521/SERVICE"
+user: user
+pwd: password
+query: "select sysdate from dual"
