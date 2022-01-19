@@ -23,6 +23,9 @@ orasql  -dsn server_url -query sql
                   (if the xls file already exists a new sheet is created)
     -of string
             Output file (default "/dev/stdout")
+            xlsx[:sheetName] ("books.xlsx:My_Sheet" will create a Sheet named "My_Sheet" 
+                              if the sheet already exists it will be deleted, so beware 
+                              of referenced values from this sheet to an another one)
     -i  { pipe, sql, json, dir }
             pipe Read from stdin
             sql  Read the query from file
@@ -35,10 +38,9 @@ orasql  -dsn server_url -query sql
 
     By default:
      -o out
-     -of /dev/sdtout
-     -if /dev/sdtin
+     -of /dev/stdout
+     -if /dev/stdin
      
-
 Example:
 
     ./orasql -db 'oracle' -dsn "user:pass@server/service_name" -query "select sysdate from dual"

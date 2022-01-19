@@ -8,6 +8,7 @@ import (
 	"github.com/xuri/excelize/v2"
 	"io"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 )
@@ -35,6 +36,8 @@ var (
 	DBConStr  string
 	colCount  int
 	colLength int
+
+	sheetName string
 )
 
 // checkErrExit: Print string to stderr and exit if err is not nil
@@ -181,8 +184,22 @@ func getParams() {
 		DBConStr = fmt.Sprintf("%s://%s", dbType, dsn)
 	}
 
-	if xlsOut && output == "/dev/stdout" {
-		output = "Books.xlsx"
+	if xlsOut {
+		t := time.Now()
+		if output == "/dev/stdout" {
+			output = "Books.xlsx"
+			sheetName = fmt.Sprintf("%02d%02d%04d_%02d%02d%02d", t.Day(), t.Month(), t.Year(), t.Hour(), t.Minute(), t.Second())
+		} else {
+			pattern := `(.*):(.*)$`
+			re := regexp.MustCompile(pattern)
+			matches := re.FindStringSubmatch(output)
+			if len(matches) > 1 {
+				output = matches[1]
+				sheetName = matches[2]
+			} else {
+				sheetName = fmt.Sprintf("%02d%02d%04d_%02d%02d%02d", t.Day(), t.Month(), t.Year(), t.Hour(), t.Minute(), t.Second())
+			}
+		}
 	}
 
 	if output == "/dev/stdout" {
@@ -214,6 +231,9 @@ func usage() {
                   (if the xls file already exists a new sheet is created)
     -of string
             Output file (default "/dev/stdout")
+            xlsx[:sheetName] ("books.xlsx:My_Sheet" will create a Sheet named "My_Sheet" 
+                              if the sheet already exists it will be deleted, so beware
+                              of referenced values from this sheet to an another one)
     -i  { pipe, sql, json, dir }
             pipe Read from stdin
             sql  Read the query from file
@@ -479,9 +499,9 @@ func excel(dataset *go_ora.DataSet) {
 		}
 	}
 
-	t := time.Now()
-	sheetName := fmt.Sprintf("%02d%02d%04d_%02d%02d%02d", t.Day(), t.Month(), t.Year(), t.Hour(), t.Minute(), t.Second())
-
+	if f.GetSheetIndex(sheetName) != -1 {
+		f.DeleteSheet(sheetName)
+	}
 	index := f.NewSheet(sheetName)
 	f.SetActiveSheet(index)
 
