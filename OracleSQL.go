@@ -4,14 +4,17 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/sijms/go-ora/v2"
-	"github.com/xuri/excelize/v2"
-	"gopkg.in/yaml.v3"
+
+	go_ora "github.com/sijms/go-ora/v2"
+
 	"io"
 	"os"
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/xuri/excelize/v2"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -481,7 +484,7 @@ func geek(dataset *go_ora.DataSet) {
 	outputString(tmp)
 	count := 0
 	for dataset.Next_() {
-		tmp = fmt.Sprintf("    '%d':\n",count)
+		tmp = fmt.Sprintf("    '%d':\n", count)
 		outputString(tmp)
 		for k, v := range dataset.CurrentRow {
 			str, err := yaml.Marshal(v)
@@ -491,7 +494,7 @@ func geek(dataset *go_ora.DataSet) {
 		}
 		count += 1
 	}
-	tmp = fmt.Sprintf("  LineCount: %d\n",count)
+	tmp = fmt.Sprintf("  LineCount: %d\n", count)
 	outputString(tmp)
 }
 
