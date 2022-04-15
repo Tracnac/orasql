@@ -1,6 +1,6 @@
 module orasql
 
-go 1.18
+go 1.17
 
 require (
 	github.com/sijms/go-ora/v2 v2.4.16
