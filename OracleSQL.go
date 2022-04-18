@@ -337,7 +337,7 @@ default output:
 
 // outputString: Write string to outputFile global var handler and call checkErrExit.
 func outputString(str string) {
-	_, err := fmt.Fprintf(outputFile, str)
+	_, err := fmt.Fprint(outputFile, str)
 	checkErrExit("Write error: ", err)
 }
 
@@ -449,17 +449,17 @@ func humanoid(dataset *go_ora.DataSet) {
 func robot(dataset *go_ora.DataSet) {
 	var tmp string
 	_len := colCount - 1
-	tmp = fmt.Sprint("[\n")
+	tmp = "[\n"
 	outputString(tmp)
 
 	first := true
 	for dataset.Next_() {
 		if !first {
-			tmp = fmt.Sprint("},\n  {")
+			tmp = "},\n  {"
 			outputString(tmp)
 		} else {
 			first = false
-			tmp = fmt.Sprint("  {")
+			tmp = "  {"
 			outputString(tmp)
 		}
 		for k, v := range dataset.CurrentRow {
@@ -474,13 +474,17 @@ func robot(dataset *go_ora.DataSet) {
 			}
 		}
 	}
-	tmp = fmt.Sprint("}\n]\n")
+	if first {
+		tmp = "]\n"
+	} else {
+		tmp = "}\n]\n"
+	}
 	outputString(tmp)
 }
 
 func geek(dataset *go_ora.DataSet) {
 	var tmp string
-	tmp = fmt.Sprint("oraSQL:\n  Lines:\n")
+	tmp = "oraSQL:\n  Lines:\n"
 	outputString(tmp)
 	count := 0
 	for dataset.Next_() {
