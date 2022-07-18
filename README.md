@@ -88,7 +88,7 @@ default output:
       "db": "oracle"
       "dsn": "127.0.0.1:1521/DB",
       "user": "user",
-      "password": "password",
+      "pwd": "password",
       "query": "select sysdate from dual"
     }
 
