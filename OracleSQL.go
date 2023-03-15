@@ -570,13 +570,14 @@ func excel(dataset *go_ora.DataSet) {
 		}
 	}
 
-	if f.GetSheetIndex(sheetName) != -1 {
+	sheetIndex, _ := f.GetSheetIndex(sheetName)
+	if sheetIndex != -1 {
 		f.DeleteSheet(sheetName)
 	}
-	index := f.NewSheet(sheetName)
-	f.SetActiveSheet(index)
+	sheetIndex, _ = f.NewSheet(sheetName)
+	f.SetActiveSheet(sheetIndex)
 
-	style, err := f.NewStyle(`{"font":{"bold":true,"color":"#FF0000"}}`)
+	style, err := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true, Color: "#FF0000"}})
 	checkErrExit("(excel) Create style error", err)
 
 	for k, v := range dataset.Columns() {
