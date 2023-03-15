@@ -19,4 +19,4 @@ require (
 	golang.org/x/text v0.8.0 // indirect
 )
 
-replace github.com/sijms/go-ora/v2 => github.com/Tracnac/go-ora/v2 v2.5.4
+replace github.com/sijms/go-ora/v2 => github.com/Tracnac/go-ora/v2 v2.5.5
