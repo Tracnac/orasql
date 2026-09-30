@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 
@@ -44,6 +46,32 @@ var (
 
 	sheetName string
 )
+
+// rows: wraps go_ora.DataSet so the current row can be read without a
+// forked driver. Upstream keeps its row buffer unexported, so we own a
+// buffer here and drive it through the exported DataSet.Next.
+//
+// The DataSet is embedded, so Cols, Columns() and Close() stay reachable
+// exactly as they were before.
+type rows struct {
+	*go_ora.DataSet
+	cur []driver.Value
+}
+
+func newRows(ds *go_ora.DataSet) *rows {
+	return &rows{DataSet: ds, cur: make([]driver.Value, len(ds.Cols))}
+}
+
+// next: advance to the next row, reporting whether one was read
+func (r *rows) next() bool {
+	if err := r.DataSet.Next(r.cur); err != nil {
+		if !errors.Is(err, io.EOF) {
+			checkErrExit("Row read error: ", err)
+		}
+		return false
+	}
+	return true
+}
 
 // checkErrExit: Print string to stderr and exit if err is not nil
 func checkErrExit(msg string, err error) {
@@ -359,12 +387,14 @@ func main() {
 		checkErrExit("Statement close error: ", err)
 	}()
 
-	rows, err := stmt.Query_(nil)
+	dataSet, err := stmt.Query_(nil)
 	checkErrExit("Query error: ", err)
 	defer func() {
-		err = rows.Close()
+		err = dataSet.Close()
 		checkErrExit("Cursor close error: ", err)
 	}()
+
+	rows := newRows(dataSet)
 
 	colCount = len(rows.Columns())
 	if kvOut && (colCount > 2 || colCount < 2) {
@@ -397,11 +427,11 @@ func main() {
 	}
 }
 
-func humanoid(dataset *go_ora.DataSet) {
+func humanoid(dataset *rows) {
 	var tmp string
 	baseFormat := "%-" + strconv.Itoa(colLength) + "s"
-	for dataset.Next_() {
-		for r, v := range dataset.CurrentRow {
+	for dataset.next() {
+		for r, v := range dataset.cur {
 			if debug {
 				switch oracleType := dataset.Cols[r].DataType; oracleType {
 				case 2:
@@ -446,14 +476,14 @@ func humanoid(dataset *go_ora.DataSet) {
 	}
 }
 
-func robot(dataset *go_ora.DataSet) {
+func robot(dataset *rows) {
 	var tmp string
 	_len := colCount - 1
 	tmp = "[\n"
 	outputString(tmp)
 
 	first := true
-	for dataset.Next_() {
+	for dataset.next() {
 		if !first {
 			tmp = "},\n  {"
 			outputString(tmp)
@@ -462,7 +492,7 @@ func robot(dataset *go_ora.DataSet) {
 			tmp = "  {"
 			outputString(tmp)
 		}
-		for k, v := range dataset.CurrentRow {
+		for k, v := range dataset.cur {
 			str, err := json.Marshal(v)
 			checkErrExit("(robot) Marshall Error", err)
 			if k < _len {
@@ -482,15 +512,15 @@ func robot(dataset *go_ora.DataSet) {
 	outputString(tmp)
 }
 
-func geek(dataset *go_ora.DataSet) {
+func geek(dataset *rows) {
 	var tmp string
 	tmp = "oraSQL:\n  Lines:\n"
 	outputString(tmp)
 	count := 0
-	for dataset.Next_() {
+	for dataset.next() {
 		tmp = fmt.Sprintf("    '%d':\n", count)
 		outputString(tmp)
-		for k, v := range dataset.CurrentRow {
+		for k, v := range dataset.cur {
 			str, err := yaml.Marshal(v)
 			checkErrExit("(geek) Marshall Error str: ", err)
 			tmp = fmt.Sprintf("      -  %s: %s", dataset.Columns()[k], string(str))
@@ -502,7 +532,7 @@ func geek(dataset *go_ora.DataSet) {
 	outputString(tmp)
 }
 
-func oldFashion(dataset *go_ora.DataSet) {
+func oldFashion(dataset *rows) {
 	var tmp string
 	_len := colCount - 1
 	for k, v := range dataset.Columns() {
@@ -514,8 +544,8 @@ func oldFashion(dataset *go_ora.DataSet) {
 			outputString(tmp)
 		}
 	}
-	for dataset.Next_() {
-		for k, v := range dataset.CurrentRow {
+	for dataset.next() {
+		for k, v := range dataset.cur {
 			if k < _len {
 				if v == nil {
 					v = "NULL"
@@ -545,19 +575,19 @@ func oldFashion(dataset *go_ora.DataSet) {
 	}
 }
 
-func lazyKV(dataset *go_ora.DataSet) {
+func lazyKV(dataset *rows) {
 	var tmp string
-	for dataset.Next_() {
-		str0, err := json.Marshal(dataset.CurrentRow[0])
+	for dataset.next() {
+		str0, err := json.Marshal(dataset.cur[0])
 		checkErrExit("(kv) Marshall Error", err)
-		str1, err := json.Marshal(dataset.CurrentRow[1])
+		str1, err := json.Marshal(dataset.cur[1])
 		checkErrExit("(kv) Marshall Error", err)
 		tmp = fmt.Sprintf("%s: %s\n", str0, str1)
 		outputString(tmp)
 	}
 }
 
-func excel(dataset *go_ora.DataSet) {
+func excel(dataset *rows) {
 	isCreated := false
 	var f *excelize.File
 	if xlsOut {
@@ -590,9 +620,9 @@ func excel(dataset *go_ora.DataSet) {
 	}
 
 	row := 1
-	for dataset.Next_() {
+	for dataset.next() {
 		row += 1
-		for k, v := range dataset.CurrentRow {
+		for k, v := range dataset.cur {
 			int2ColRow, err := excelize.CoordinatesToCellName(k+1, row)
 			checkErrExit("(excel) int2ColRow", err)
 			err = f.SetCellValue(sheetName, int2ColRow, v)
